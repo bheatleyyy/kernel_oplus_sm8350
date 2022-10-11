@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -23,6 +22,7 @@
 #ifdef OPLUS_BUG_STABILITY
 #include "oplus_display_private_api.h"
 #include "oplus_dc_diming.h"
+#include <linux/sched.h>
 #endif
 
 #ifdef OPLUS_BUG_STABILITY
@@ -128,6 +128,11 @@ static u32 dither_matrix[DITHER_MATRIX_SZ] = {
 extern bool is_spread_backlight(struct dsi_display *display, int level);
 extern void update_pending_backlight(struct dsi_display *display, int level);
 extern int get_boot_mode(void);
+struct dc_apollo_pcc_sync dc_apollo;
+EXPORT_SYMBOL(dc_apollo);
+extern int dc_apollo_enable;
+extern int oplus_backlight_wait_vsync(struct drm_encoder *drm_enc);
+extern int dc_apollo_sync_hbmon(struct dsi_display *display);
 #endif
 
 static int sde_backlight_device_update_status(struct backlight_device *bd)
@@ -254,8 +259,41 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 
 		if (display->panel->oplus_priv.is_apollo_support && backlight_smooth_enable) {
 			//#ifdef OPLUS_BUG_STABILITY
-			if ((MSM_BOOT_MODE_FACTORY != get_boot_mode()) && (is_spread_backlight(display, bl_lvl))) {
+			if ((MSM_BOOT_MODE_FACTORY != get_boot_mode()) && (is_spread_backlight(display, bl_lvl)) && !dc_apollo_sync_hbmon(display)) {
 			//#endif
+				if (display->panel->oplus_priv.dc_apollo_sync_enable) {
+					if ((display->panel->bl_config.bl_level >= display->panel->oplus_priv.sync_brightness_level
+						&& display->panel->bl_config.bl_level < display->panel->oplus_priv.dc_apollo_sync_brightness_level)
+						|| display->panel->bl_config.bl_level == 4) {
+						if (bl_lvl == display->panel->oplus_priv.dc_apollo_sync_brightness_level
+							/*&& dc_apollo_enable*/
+							&& dc_apollo.pcc_last >= display->panel->oplus_priv.dc_apollo_sync_brightness_level_pcc) {
+							rc = wait_event_timeout(dc_apollo.bk_wait, dc_apollo.dc_pcc_updated, msecs_to_jiffies(17));
+							if (!rc) {
+								pr_err("dc wait timeout\n");
+							}
+							else {
+								oplus_backlight_wait_vsync(c_conn->encoder);
+							}
+							dc_apollo.dc_pcc_updated = 0;
+						}
+					}
+					else if (display->panel->bl_config.bl_level < display->panel->oplus_priv.sync_brightness_level
+							&& display->panel->bl_config.bl_level > 4) {
+						if (bl_lvl == display->panel->oplus_priv.dc_apollo_sync_brightness_level
+							/*&& dc_apollo_enable*/
+							&& dc_apollo.pcc_last >= display->panel->oplus_priv.dc_apollo_sync_brightness_level_pcc_min) {
+							rc = wait_event_timeout(dc_apollo.bk_wait, dc_apollo.dc_pcc_updated, msecs_to_jiffies(17));
+							if (!rc) {
+								pr_err("dc wait timeout\n");
+							}
+							else {
+								oplus_backlight_wait_vsync(c_conn->encoder);
+							}
+							dc_apollo.dc_pcc_updated = 0;
+						}
+					}
+				}
 				spin_lock(&g_bk_lock);
 				update_pending_backlight(display, bl_lvl);
 				spin_unlock(&g_bk_lock);
@@ -351,6 +389,13 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 		return -ENODEV;
 	}
 	c_conn->thermal_max_brightness = bl_config->brightness_max_level;
+
+#ifdef OPLUS_BUG_STABILITY
+		if (display->panel->oplus_priv.dc_apollo_sync_enable) {
+			init_waitqueue_head(&dc_apollo.bk_wait);
+			mutex_init(&dc_apollo.lock);
+		}
+#endif
 
 	/**
 	 * In TVM, thermal cooling device is not enabled. Registering with dummy
@@ -1048,6 +1093,10 @@ static int _sde_connector_update_dirty_properties(
 			_sde_connector_update_power_locked(c_conn);
 			mutex_unlock(&c_conn->lock);
 			break;
+		case CONNECTOR_PROP_BL_SCALE:
+		case CONNECTOR_PROP_SV_BL_SCALE:
+			_sde_connector_update_bl_scale(c_conn);
+			break;
 		case CONNECTOR_PROP_HDR_METADATA:
 			_sde_connector_update_hdr_metadata(c_conn, c_state);
 			break;
@@ -1088,7 +1137,13 @@ struct sde_connector_dyn_hdr_metadata *sde_connector_get_dyn_hdr_meta(
 	return &c_state->dyn_hdr_meta;
 }
 
-int sde_connector_pre_kickoff(struct drm_connector *connector)
+int sde_connector_update_complete_commit(struct drm_connector *connector,
+		bool force_update_dsi_clocks)
+{
+	return sde_connector_pre_kickoff(connector, force_update_dsi_clocks);
+}
+
+int sde_connector_pre_kickoff(struct drm_connector *connector, bool force_update_dsi_clocks)
 {
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
@@ -1125,7 +1180,7 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
 		display = (struct dsi_display *)c_conn->display;
 		if(display && display->panel && display->panel->oplus_priv.vendor_name) {
-			if ((!strcmp(display->panel->oplus_priv.vendor_name, "AMB655X")) || (!strcmp(display->panel->oplus_priv.vendor_name, "AMB670YF01"))) {
+			if ((!strcmp(display->panel->oplus_priv.vendor_name, "AMB655X")) || (!strcmp(display->panel->oplus_priv.vendor_name, "AMB670YF01")) || (!strcmp(display->panel->oplus_priv.vendor_name, "AMS662ZS01"))) {
 				rc = sde_connector_update_hbm(connector);
 			}
 		}
@@ -1144,7 +1199,7 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 
 	SDE_EVT32_VERBOSE(connector->base.id);
 
-	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params);
+	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params, force_update_dsi_clocks);
 
 	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI)
 		display->queue_cmd_waits = false;
@@ -1311,9 +1366,6 @@ void sde_connector_destroy(struct drm_connector *connector)
 	}
 
 	c_conn = to_sde_connector(connector);
-
-	if (c_conn->sysfs_dev)
-		device_unregister(c_conn->sysfs_dev);
 
 	/* cancel if any pending esd work */
 	sde_connector_schedule_status_work(connector, false);
@@ -1833,7 +1885,7 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 #ifdef OPLUS_BUG_STABILITY
 	case CONNECTOR_PROP_QSYNC_MIN_FPS:
 		if (oplus_adfr_is_support()) {
-			SDE_INFO("kVRR set qsync minfps dirty with %llu[%08X]\n", val, val);
+			SDE_DEBUG("kVRR set qsync minfps dirty with %llu[%08X]\n", val, val);
 
 			/* minfps maybe disappear after state change, so handle it early */
 			if (oplus_adfr_handle_auto_mode(val)) {
@@ -2140,7 +2192,7 @@ static int _sde_connector_lm_preference(struct sde_connector *sde_conn,
 		return -EINVAL;
 	}
 
-	sde_conn->lm_mask = sde_hw_mixer_set_preference(sde_kms->catalog, num_lm, disp_type);
+	sde_hw_mixer_set_preference(sde_kms->catalog, num_lm, disp_type);
 
 	return ret;
 }
@@ -2749,6 +2801,10 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_TOUCHPANEL_OPLUS)
+extern void set_esd_check_happened(int val);
+#endif
+
 static void _sde_connector_report_panel_dead(struct sde_connector *conn,
 	bool skip_pre_kickoff)
 {
@@ -2764,6 +2820,10 @@ static void _sde_connector_report_panel_dead(struct sde_connector *conn,
 	 */
 	if (conn->panel_dead)
 		return;
+
+#if IS_ENABLED(CONFIG_TOUCHPANEL_OPLUS)
+        set_esd_check_happened(1);
+#endif
 
 	SDE_EVT32(SDE_EVTLOG_ERROR);
 	sde_encoder_display_failure_notification(conn->encoder,
@@ -2975,7 +3035,7 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 		return -EINVAL;
 	}
 
-	info = vzalloc(sizeof(*info));
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
@@ -3033,7 +3093,7 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 			SDE_KMS_INFO_DATALEN(info),
 			prop_id);
 exit:
-	vfree(info);
+	kfree(info);
 
 	return rc;
 }
@@ -3198,104 +3258,6 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 	return 0;
 }
 
-static ssize_t panel_power_state_show(struct device *device,
-	struct device_attribute *attr, char *buf)
-{
-	struct drm_connector *conn;
-	struct sde_connector *sde_conn;
-
-	conn = dev_get_drvdata(device);
-	sde_conn = to_sde_connector(conn);
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", sde_conn->last_panel_power_mode);
-}
-
-static ssize_t twm_enable_store(struct device *device,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct drm_connector *conn;
-	struct sde_connector *sde_conn;
-	struct dsi_display *dsi_display;
-	int rc;
-	int data;
-
-	conn = dev_get_drvdata(device);
-	sde_conn = to_sde_connector(conn);
-	dsi_display = (struct dsi_display *) sde_conn->display;
-	rc = kstrtoint(buf, 10, &data);
-	if (rc) {
-		SDE_ERROR("kstrtoint failed, rc = %d\n", rc);
-		return -EINVAL;
-	}
-	sde_conn->twm_en = data ? true : false;
-	dsi_display->panel->is_twm_en = sde_conn->twm_en;
-	sde_conn->allow_bl_update = data ? false : true;
-	SDE_DEBUG("TWM: %s\n", sde_conn->twm_en ? "ENABLED" : "DISABLED");
-	return count;
-}
-
-static ssize_t twm_enable_show(struct device *device,
-	struct device_attribute *attr, char *buf)
-{
-	struct drm_connector *conn;
-	struct sde_connector *sde_conn;
-
-	conn = dev_get_drvdata(device);
-	sde_conn = to_sde_connector(conn);
-
-	SDE_DEBUG("TWM: %s\n", sde_conn->twm_en ? "ENABLED" : "DISABLED");
-	return scnprintf(buf, PAGE_SIZE, "%d\n", sde_conn->twm_en);
-}
-
-static DEVICE_ATTR_RO(panel_power_state);
-static DEVICE_ATTR_RW(twm_enable);
-
-static struct attribute *sde_connector_dev_attrs[] = {
-	&dev_attr_panel_power_state.attr,
-	&dev_attr_twm_enable.attr,
-	NULL
-};
-
-static const struct attribute_group sde_connector_attr_group = {
-	.attrs = sde_connector_dev_attrs,
-};
-static const struct attribute_group *sde_connector_attr_groups[] = {
-	&sde_connector_attr_group,
-	NULL,
-};
-
-int sde_connector_post_init(struct drm_device *dev, struct drm_connector *conn)
-{
-	struct sde_connector *c_conn;
-	int rc = 0;
-
-	if (!dev || !dev->primary || !dev->primary->kdev || !conn) {
-		SDE_ERROR("invalid input param(s)\n");
-		rc = -EINVAL;
-		return rc;
-	}
-
-	c_conn =  to_sde_connector(conn);
-
-	if (conn->connector_type != DRM_MODE_CONNECTOR_DSI)
-		return rc;
-
-	c_conn->sysfs_dev =
-		device_create_with_groups(dev->primary->kdev->class, dev->primary->kdev, 0,
-			conn, sde_connector_attr_groups, "sde-conn-%d-%s", conn->index,
-			conn->name);
-	if (IS_ERR_OR_NULL(c_conn->sysfs_dev)) {
-		SDE_ERROR("connector:%d sysfs create failed rc:%ld\n", &c_conn->base.index,
-			PTR_ERR(c_conn->sysfs_dev));
-		if (!c_conn->sysfs_dev)
-			rc = -EINVAL;
-		else
-			rc = PTR_ERR(c_conn->sysfs_dev);
-	}
-
-	return rc;
-}
-
 struct drm_connector *sde_connector_init(struct drm_device *dev,
 		struct drm_encoder *encoder,
 		struct drm_panel *panel,
@@ -3347,7 +3309,6 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 	c_conn->dpms_mode = DRM_MODE_DPMS_ON;
 	c_conn->lp_mode = 0;
 	c_conn->last_panel_power_mode = SDE_MODE_DPMS_ON;
-	c_conn->twm_en = false;
 
 	sde_kms = to_sde_kms(priv->kms);
 	if (sde_kms->vbif[VBIF_NRT]) {

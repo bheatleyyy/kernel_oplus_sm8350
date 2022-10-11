@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2020, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _DSI_PANEL_H_
@@ -136,6 +136,7 @@ struct dsi_backlight_config {
 	u32 bl_normal_max_level;
 	u32 brightness_normal_max_level;
 	u32 brightness_default_level;
+	u32 bl_hbm_min_level;
 #endif /* OPLUS_BUG_STABILITY */
 
 	u32 bl_level;
@@ -177,6 +178,7 @@ struct dsi_panel_reset_config {
 #ifdef OPLUS_BUG_STABILITY
 	int panel_vout_gpio;
 	int panel_vddr_aod_en_gpio;
+	int panel_ddic_en_gpio;
 #endif
 };
 
@@ -221,12 +223,20 @@ struct dsi_panel_oplus_privite {
 	bool is_osc_support;
 	u32 osc_clk_mode0_rate;
 	u32 osc_clk_mode1_rate;
+	bool first_bl_on;
+	bool pre_bl_delay_enabled;
+	u32 pre_bl_delay_ms;
 	bool dp_support;
 	bool cabc_enabled;
+	u32 cabc_status;
 	bool dre_enabled;
 	// Add for apollo support
 	bool is_apollo_support;
 	u32 sync_brightness_level;
+	bool dc_apollo_sync_enable;
+	u32 dc_apollo_sync_brightness_level;
+	u32 dc_apollo_sync_brightness_level_pcc;
+	u32 dc_apollo_sync_brightness_level_pcc_min;
 };
 #endif /* OPLUS_BUG_STABILITY */
 
@@ -296,11 +306,10 @@ struct dsi_panel {
 	bool reset_gpio_always_on;
 	atomic_t esd_recovery_pending;
 
-	bool is_twm_en;
-	bool skip_panel_off;
 	bool panel_initialized;
 	bool te_using_watchdog_timer;
 	struct dsi_qsync_capabilities qsync_caps;
+	bool switch_vsync_delay;
 
 	char dce_pps_cmd[DSI_CMD_PPS_SIZE];
 	enum dsi_dms_mode dms_mode;

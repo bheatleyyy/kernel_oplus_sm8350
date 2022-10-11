@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of_device.h>
@@ -357,8 +356,6 @@ static int dsi_phy_settings_init(struct platform_device *pdev,
 
 	phy->allow_phy_power_off = of_property_read_bool(pdev->dev.of_node,
 			"qcom,panel-allow-phy-poweroff");
-	phy->hw.clamp_enable = of_property_read_bool(pdev->dev.of_node,
-			"qcom,phy-clamp-enable");
 
 	of_property_read_u32(pdev->dev.of_node,
 			"qcom,dsi-phy-regulator-min-datarate-bps",
@@ -1147,6 +1144,33 @@ int dsi_phy_set_timing_params(struct msm_dsi_phy *phy,
 
 	if (phy->hw.ops.commit_phy_timing && commit)
 		phy->hw.ops.commit_phy_timing(&phy->hw, &phy->cfg.timing);
+
+	mutex_unlock(&phy->phy_lock);
+	return rc;
+}
+
+/* TODO: Deduplicate this ASAP */
+int dsi_phy_set_timing_params_commit(struct msm_dsi_phy *phy,
+				     u32 *timing, u32 size)
+{
+	int rc = 0;
+
+	if (!phy || !timing || !size) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	};
+
+	mutex_lock(&phy->phy_lock);
+
+	if (phy->hw.ops.phy_timing_val)
+		rc = phy->hw.ops.phy_timing_val(&phy->cfg.timing, timing, size);
+	if (!rc)
+		phy->cfg.is_phy_timing_present = true;
+
+	if (phy->hw.ops.commit_phy_timing)
+		phy->hw.ops.commit_phy_timing(&phy->hw, &phy->cfg.timing);
+	else
+		pr_warn("WARNING: No function to commit PHY timing!!\n");
 
 	mutex_unlock(&phy->phy_lock);
 	return rc;

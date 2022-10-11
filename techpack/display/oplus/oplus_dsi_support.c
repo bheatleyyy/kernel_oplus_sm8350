@@ -3,12 +3,6 @@
 ** File : oplus_dsi_support.c
 ** Description : display driver private management
 ** Version : 1.1
-** Date : 2020/09/06
-** Author : liping-m@PSW.MM.Display.Stability
-**
-** ------------------------------- Revision History: -----------
-**  <author>        <data>        <version >        <desc>
-**   LiPing-M         2020/09/06        1.1           Build this moudle
 ******************************************************************/
 #include "oplus_dsi_support.h"
 #include <soc/oplus/boot_mode.h>

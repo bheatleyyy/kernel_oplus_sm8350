@@ -201,6 +201,8 @@ struct sde_encoder_ops {
  *				of esd attack to ensure esd workqueue detects
  *				the previous frame transfer completion before
  *				next update is triggered.
+ *@fps_switch_high_to_low:	boolean to note direction of fps switch
+ *@update_clocks_on_complete_commit:	boolean to force update DSI clocks
  */
 struct sde_encoder_virt {
 	struct drm_encoder base;
@@ -273,6 +275,8 @@ struct sde_encoder_virt {
 	struct cpumask valid_cpu_mask;
 	struct msm_mode_info mode_info;
 	bool delay_kickoff;
+	bool fps_switch_high_to_low;
+	bool update_clocks_on_complete_commit;
 #ifdef OPLUS_BUG_STABILITY
 	struct hrtimer fakeframe_timer;
 	struct kthread_work fakeframe_work;
@@ -314,12 +318,6 @@ enum oplus_sync_method {
 void sde_encoder_get_hw_resources(struct drm_encoder *encoder,
 		struct sde_encoder_hw_resources *hw_res,
 		struct drm_connector_state *conn_state);
-
-/**
- * sde_encoder_trigger_rsc_state_change - rsc state change.
- * @encoder:	encoder pointer
- */
-void sde_encoder_trigger_rsc_state_change(struct drm_encoder *drm_enc);
 
 /**
  * sde_encoder_early_wakeup - early wake up display
@@ -368,10 +366,12 @@ int sde_encoder_poll_line_counts(struct drm_encoder *encoder);
  *	Delayed: Block until next trigger can be issued.
  * @encoder:	encoder pointer
  * @params:	kickoff time parameters
+ * @old_crtc_state:     pointer to old crtc state
  * @Returns:	Zero on success, last detected error otherwise
  */
 int sde_encoder_prepare_for_kickoff(struct drm_encoder *encoder,
-		struct sde_encoder_kickoff_params *params);
+		struct sde_encoder_kickoff_params *params,
+		struct drm_crtc_state *old_crtc_state);
 
 /**
  * sde_encoder_trigger_kickoff_pending - Clear the flush bits from previous
@@ -419,6 +419,14 @@ int sde_encoder_wait_for_event(struct drm_encoder *drm_encoder,
  */
 int sde_encoder_idle_request(struct drm_encoder *drm_enc);
 
+/**
+ * sde_encoder_update_complete_commit - when there is DMS FPS switch
+ *		in old_crtc_state, decrease DSI clocks as per low fps.
+ * @encoder:    encoder pointer
+ * @old_state:    pointer to old crtc state
+ */
+void sde_encoder_update_complete_commit(struct drm_encoder *drm_enc,
+		struct drm_crtc_state *old_state, bool *update_perf);
 /*
  * sde_encoder_get_fps - get interface frame rate of the given encoder
  * @encoder: Pointer to drm encoder object
@@ -563,12 +571,12 @@ bool sde_encoder_is_cwb_disabling(struct drm_encoder *drm_enc,
 	struct drm_crtc *drm_crtc);
 
 /**
- * sde_encoder_get_display_type - returns the display_type of underlying
- *     display
+ * sde_encoder_is_primary_display - checks if underlying display is primary
+ *     display or not.
  * @drm_enc:    Pointer to drm encoder structure
- * @Return:     display_type
+ * @Return:     true if it is primary display. false if secondary display
  */
-u32 sde_encoder_get_display_type(struct drm_encoder *enc);
+bool sde_encoder_is_primary_display(struct drm_encoder *enc);
 
 /**
  * sde_encoder_is_dsi_display - checks if underlying display is DSI
@@ -673,6 +681,13 @@ static inline bool sde_encoder_is_widebus_enabled(struct drm_encoder *drm_enc)
 	sde_enc = to_sde_encoder_virt(drm_enc);
 	return sde_enc->mode_info.wide_bus_en;
 }
+
+/**
+ * sde_encoder_in_crtc_has_fps_switch_flag_set - return fps_switch_high_to_low in sde enc
+ * @crtc:	Pointer to drm crtc structure
+ * @Return: true if there is fps_switch from high_to_low
+ */
+bool sde_encoder_in_crtc_has_fps_switch_flag_set(struct drm_crtc *crtc);
 
 #if defined(OPLUS_FEATURE_PXLW_IRIS5)
 /**

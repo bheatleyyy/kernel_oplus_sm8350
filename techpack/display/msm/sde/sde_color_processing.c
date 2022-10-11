@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -286,6 +285,11 @@ static int set_dspp_vlut_feature(struct sde_hw_dspp *hw_dspp,
 	return ret;
 }
 
+#ifdef OPLUS_BUG_STABILITY
+extern int dc_apollo_enable;
+extern int oplus_dimlayer_hbm;
+#endif
+
 static int set_dspp_pcc_feature(struct sde_hw_dspp *hw_dspp,
 				struct sde_hw_cp_cfg *hw_cfg,
 				struct sde_crtc *hw_crtc)
@@ -294,6 +298,7 @@ static int set_dspp_pcc_feature(struct sde_hw_dspp *hw_dspp,
 #ifdef OPLUS_BUG_STABILITY
 	struct sde_crtc_state *cstate;
 	struct drm_msm_pcc *save_pcc;
+	struct dsi_display *display;
 
 	if (!hw_cfg) {
 		return -EINVAL;
@@ -307,10 +312,20 @@ static int set_dspp_pcc_feature(struct sde_hw_dspp *hw_dspp,
 		return -EINVAL;
 	}
 
-	if (OPLUS_DISPLAY_POWER_DOZE_SUSPEND == get_oplus_display_power_status() ||
-			OPLUS_DISPLAY_POWER_DOZE == get_oplus_display_power_status() ||
-			(cstate->aod_skip_pcc == true) ||
-			cstate->fingerprint_mode) {
+	display = get_main_display();
+	if (!display->panel->oplus_priv.dc_apollo_sync_enable || !dc_apollo_enable) {
+		if (OPLUS_DISPLAY_POWER_DOZE_SUSPEND == get_oplus_display_power_status() ||
+				OPLUS_DISPLAY_POWER_DOZE == get_oplus_display_power_status() ||
+				(cstate->aod_skip_pcc == true) ||
+				cstate->fingerprint_mode) {
+			hw_cfg->payload = NULL;
+		}
+	}
+
+	if (display->panel->oplus_priv.dc_apollo_sync_enable && dc_apollo_enable
+		&& ((OPLUS_DISPLAY_POWER_DOZE_SUSPEND == get_oplus_display_power_status()
+				|| OPLUS_DISPLAY_POWER_DOZE == get_oplus_display_power_status())
+			&& !oplus_dimlayer_hbm)) {
 		hw_cfg->payload = NULL;
 	}
 #endif
@@ -4553,7 +4568,7 @@ void sde_cp_crtc_enable(struct drm_crtc *drm_crtc)
 	if (!num_mixers)
 		return;
 	mutex_lock(&crtc->crtc_cp_lock);
-	info = vzalloc(sizeof(struct sde_kms_info));
+	info = kzalloc(sizeof(struct sde_kms_info), GFP_KERNEL);
 	if (info) {
 		for (i = 0; i < ARRAY_SIZE(dspp_cap_update_func); i++)
 			dspp_cap_update_func[i](crtc, info);
@@ -4562,7 +4577,7 @@ void sde_cp_crtc_enable(struct drm_crtc *drm_crtc)
 			info->data, SDE_KMS_INFO_DATALEN(info),
 			CRTC_PROP_DSPP_INFO);
 	}
-	vfree(info);
+	kfree(info);
 	mutex_unlock(&crtc->crtc_cp_lock);
 }
 
@@ -4577,12 +4592,12 @@ void sde_cp_crtc_disable(struct drm_crtc *drm_crtc)
 	}
 	crtc = to_sde_crtc(drm_crtc);
 	mutex_lock(&crtc->crtc_cp_lock);
-	info = vzalloc(sizeof(struct sde_kms_info));
+	info = kzalloc(sizeof(struct sde_kms_info), GFP_KERNEL);
 	if (info)
 		msm_property_set_blob(&crtc->property_info,
 				&crtc->dspp_blob_info,
 			info->data, SDE_KMS_INFO_DATALEN(info),
 			CRTC_PROP_DSPP_INFO);
 	mutex_unlock(&crtc->crtc_cp_lock);
-	vfree(info);
+	kfree(info);
 }

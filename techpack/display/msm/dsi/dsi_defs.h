@@ -49,7 +49,6 @@
  * @DSI_PIXEL_FORMAT_RGB111:
  * @DSI_PIXEL_FORMAT_RGB332:
  * @DSI_PIXEL_FORMAT_RGB444:
- * @DSI_PIXEL_FORMAT_RGB101010:
  * @DSI_PIXEL_FORMAT_MAX:
  */
 enum dsi_pixel_format {
@@ -60,7 +59,6 @@ enum dsi_pixel_format {
 	DSI_PIXEL_FORMAT_RGB111,
 	DSI_PIXEL_FORMAT_RGB332,
 	DSI_PIXEL_FORMAT_RGB444,
-	DSI_PIXEL_FORMAT_RGB101010,
 	DSI_PIXEL_FORMAT_MAX
 };
 
@@ -311,6 +309,7 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SEED_MODE2,
 	DSI_CMD_SEED_MODE3,
 	DSI_CMD_SEED_MODE4,
+	DSI_CMD_SEED_MODE8,
 	DSI_CMD_SEED_OFF,
 	DSI_CMD_NORMAL_HBM_ON,
 	DSI_CMD_AOD_HIGH_LIGHT_MODE,
@@ -367,6 +366,8 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SEED_DC_MODE0,
 	DSI_CMD_SEED_DC_MODE1,
 	DSI_CMD_SEED_DC_MODE2,
+	DSI_CMD_ROUND_CORNER_ON,
+	DSI_CMD_ROUND_CORNER_OFF,
 	DSI_CMD_CABC_OFF,
 	DSI_CMD_CABC_UI,
 	DSI_CMD_CABC_IMAGE,
@@ -623,6 +624,7 @@ struct dsi_video_engine_cfg {
 	bool hsa_lp11_en;
 	bool eof_bllp_lp11_en;
 	bool bllp_lp11_en;
+	bool splash_dms;
 	enum dsi_video_traffic_mode traffic_mode;
 	u32 vc_id;
 };
@@ -735,6 +737,14 @@ struct dsi_display_mode_priv_info {
 	u32 fakeframe_config;
 	u32 deferred_fakeframe_time;
 #endif
+#ifdef OPLUS_BUG_STABILITY
+	/* Add for apollo */
+	/* width & period of vsync may not conform to refresh rate
+	 * add variable to store width & period of vsync
+	 */
+	u32 vsync_width;
+	u32 vsync_period;
+#endif /* OPLUS_BUG_STABILITY */
 };
 
 /**
@@ -755,6 +765,7 @@ struct dsi_display_mode {
 #endif
 	enum dsi_op_mode panel_mode;
 	bool is_preferred;
+	bool splash_dms;
 	struct dsi_display_mode_priv_info *priv_info;
 };
 
@@ -851,8 +862,6 @@ static inline int dsi_pixel_format_to_bpp(enum dsi_pixel_format fmt)
 		return 8;
 	case DSI_PIXEL_FORMAT_RGB444:
 		return 12;
-	case DSI_PIXEL_FORMAT_RGB101010:
-		return 30;
 	}
 	return 24;
 }

@@ -476,10 +476,6 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 				dsi_mode.panel_mode);
 		}
 	}
-#ifdef OPLUS_BUG_STABILITY
-	if (display->is_cont_splash_enabled)
-		dsi_mode.dsi_mode_flags &= ~DSI_MODE_FLAG_DMS;
-#endif /* OPLUS_BUG_STABILITY */
 
 	/* Reject seamless transition when active changed */
 	if (crtc_state->active_changed &&
@@ -965,6 +961,9 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 	for (i = 0; i < count; i++) {
 		struct drm_display_mode *m;
 
+		if (modes[i].splash_dms)
+			modes[i].dsi_mode_flags |= DSI_MODE_FLAG_DMS;
+
 		memset(&drm_mode, 0x0, sizeof(drm_mode));
 		dsi_convert_to_drm_mode(&modes[i], &drm_mode);
 		m = drm_mode_duplicate(connector->dev, &drm_mode);
@@ -987,6 +986,10 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 			m->type |= DRM_MODE_TYPE_PREFERRED;
 		}
 		drm_mode_probed_add(connector, m);
+
+		if (modes[i].splash_dms)
+			drm_set_preferred_mode(
+				connector, m->hdisplay, m->vdisplay);
 	}
 
 	rc = dsi_drm_update_edid_name(&edid, display->panel->name);
@@ -1042,14 +1045,15 @@ enum drm_mode_status dsi_conn_mode_valid(struct drm_connector *connector,
 
 int dsi_conn_pre_kickoff(struct drm_connector *connector,
 		void *display,
-		struct msm_display_kickoff_params *params)
+		struct msm_display_kickoff_params *params,
+		bool force_update_dsi_clocks)
 {
 	if (!connector || !display || !params) {
 		DSI_ERR("Invalid params\n");
 		return -EINVAL;
 	}
 
-	return dsi_display_pre_kickoff(connector, display, params);
+	return dsi_display_pre_kickoff(connector, display, params, force_update_dsi_clocks);
 }
 
 int dsi_conn_prepare_commit(void *display,

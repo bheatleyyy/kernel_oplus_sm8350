@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -114,7 +113,6 @@ struct dsi_display_boot_param {
  * @shadow_cphy_clks:  Used for C-phy clock switch.
  */
 struct dsi_display_clk_info {
-	struct dsi_clk_link_set xo_clks;
 	struct dsi_clk_link_set src_clks;
 	struct dsi_clk_link_set mux_clks;
 	struct dsi_clk_link_set cphy_clks;
@@ -217,8 +215,6 @@ struct dsi_display {
 	int disp_te_gpio;
 	bool is_te_irq_enabled;
 	struct completion esd_te_gate;
-	bool needs_clk_src_reset;
-	bool needs_ctrl_vreg_disable;
 
 	u32 ctrl_count;
 	struct dsi_display_ctrl ctrl[MAX_DSI_CTRLS_PER_DISPLAY];
@@ -650,7 +646,7 @@ int dsi_pre_clkon_cb(void *priv, enum dsi_clk_type clk_type,
  * Return: error code.
  */
 int dsi_display_unprepare(struct dsi_display *display);
-int dsi_display_set_ulp_load(struct dsi_display *display, bool enable);
+
 int dsi_display_set_tpg_state(struct dsi_display *display, bool enable);
 
 int dsi_display_clock_gate(struct dsi_display *display, bool enable);
@@ -756,11 +752,13 @@ int dsi_display_set_power(struct drm_connector *connector,
  * @connector: Pointer to drm connector structure
  * @display: Pointer to private display structure
  * @params: Parameters for kickoff-time programming
+ * @force_update_dsi_clocks: Bool to force clock update
  * Returns: Zero on success
  */
 int dsi_display_pre_kickoff(struct drm_connector *connector,
 		struct dsi_display *display,
-		struct msm_display_kickoff_params *params);
+		struct msm_display_kickoff_params *params,
+		bool force_update_dsi_clocks);
 
 /*
  * dsi_display_pre_commit - program pre commit features
@@ -793,6 +791,8 @@ int dsi_display_cont_splash_config(void *display);
 #ifdef OPLUS_BUG_STABILITY
 struct dsi_display *get_main_display(void);
 struct dsi_display *get_sec_display(void);
+struct dsi_display *get_current_display(void);
+void set_current_display(struct dsi_display *display);
 
 /* Add for implement panel register read */
 int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display);
@@ -830,37 +830,5 @@ int dsi_display_dump_clks_state(struct dsi_display *display);
  * @display:         Handle to display
  */
 void dsi_display_dfps_update_parent(struct dsi_display *display);
-
-/**
- * dsi_display_unset_clk_src() - reset the clocks source to default
- * @display:         Handle to display
- *
- * Return: Zero on Success
- */
-int dsi_display_unset_clk_src(struct dsi_display *display);
-
-/**
- * dsi_display_set_clk_src() - set the clocks source
- * @display:         Handle to display
- *
- * Return: Zero on Success
- */
-int dsi_display_set_clk_src(struct dsi_display *display);
-
-/**
- * dsi_display_ctrl_vreg_on() - enable dsi ctrl regulator
- * @display:         Handle to display
- *
- * Return: Zero on Success
- */
-int dsi_display_ctrl_vreg_on(struct dsi_display *display);
-
-/**
- * dsi_display_ctrl_vreg_off() - disable dsi ctrl regulator
- * @display:         Handle to display
- *
- * Return: Zero on Success
- */
-int dsi_display_ctrl_vreg_off(struct dsi_display *display);
 
 #endif /* _DSI_DISPLAY_H_ */
