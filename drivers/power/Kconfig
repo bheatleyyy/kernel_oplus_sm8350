@@ -81,4 +81,5 @@ config OPLUS_FEATURE_CHG_BASIC
 	default n
 	help
 	  Say Y to include support
+source "drivers/power/oplus/Kconfig"
 #endif

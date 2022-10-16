@@ -3,5 +3,5 @@ obj-$(CONFIG_POWER_AVS)		+= avs/
 obj-$(CONFIG_POWER_RESET)	+= reset/
 obj-$(CONFIG_POWER_SUPPLY)	+= supply/
 #ifdef CONFIG_OPLUS_FEATURE_CHG_BASIC
-obj-$(CONFIG_OPLUS_SM8350_CHARGER)	+= oplus_chg/
+obj-$(CONFIG_OPLUS_SM8350_CHARGER)	+= oplus/
 #endif

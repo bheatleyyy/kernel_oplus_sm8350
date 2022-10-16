@@ -1174,7 +1174,7 @@
                          0x0c 0x70      /* override_x1 */
                          0x17 0x74>;    /* override x2 */
 };
-//#endif /*OPLUS_FEATURE_CHG_BASIC*/
+//#endif /*CONFIG_OPLUS_FEATURE_CHG_BASIC*/
 
 //#lahaina-qupv3.dtsi
 //#ifdef OPLUS_FEATRUE_ESIM
@@ -2138,7 +2138,7 @@
 
 &pm8350b_haptics {
 	status = "ok";
-//#ifdef OPLUS_FEATURE_CHG_BASIC
+//#ifdef CONFIG_OPLUS_FEATURE_CHG_BASIC
 	qcom,vmax-mv = <1280>;
 	qcom,cl-vmax-mv = <1280>;
 	qcom,lra-period-us = <5882>;
@@ -2350,13 +2350,13 @@
 };
 //#endif /*OPLUS_EDIT*/
 
-//#ifdef OPLUS_FEATURE_CHG_BASIC
+//#ifdef CONFIG_OPLUS_FEATURE_CHG_BASIC
 &usb0 {
 	dwc3@a600000 {
 		snps,usb2-lpm-disable;
 	};
 };
-//#endif /* OPLUS_FEATURE_CHG_BASIC */
+//#endif /* CONFIG_OPLUS_FEATURE_CHG_BASIC */
 
 //#ifdef OPLUS_FEATURE_THERMAL
 &thermal_zones {
