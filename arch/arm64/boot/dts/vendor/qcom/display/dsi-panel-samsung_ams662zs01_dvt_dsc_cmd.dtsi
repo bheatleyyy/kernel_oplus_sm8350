@@ -934,10 +934,12 @@
 	};
 };
 
+/*
 &dsi_samsung_ams662zs01_dvt_dsc_cmd {
 	oplus,apollo_backlight_enable;
 	oplus,apollo-sync-brightness-level = <540>;
 };
+*/
 
 &dsi_samsung_ams662zs01_dvt_dsc_cmd {
 	qcom,panel_voltage_vddi_name = "vddio";
