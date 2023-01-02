@@ -4517,10 +4517,6 @@ static int tfa98xx_probe(struct snd_soc_component *component)
 				   tfa98xx_check_feedback, ARRAY_SIZE(tfa98xx_check_feedback));
 	#endif
 
-	#ifdef OPLUS_FEATURE_SMARTPA_PM
-	add_smartpa_pm_controls(tfa98xx->component);
-	#endif /* OPLUS_FEATURE_SMARTPA_PM */
-
 	dev_info(component->dev, "%s: codec registered (%s) ret=%d",
 							__func__, tfa98xx->fw.name, ret);
 
